@@ -128,7 +128,7 @@ stars-gateway/
 │   └── main.rs         # 核心代码
 └── docs/
     ├── RFC.md           # 技术规范
-    └── Starswarm-AIOS-WhitePaper-v0.1.0-Lexicon.md  # 群星AI.OS
+    └── 群星架构白皮书.md  # 群星AI.OS
 ```
 
 ## Naming & Philosophy
