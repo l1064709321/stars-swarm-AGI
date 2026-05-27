@@ -1,5 +1,5 @@
 # STARS-Gateway v0.1.0: 概念验证
-[English](README.md) | 中文.
+[English](README-en.md) | 中文.
 
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue)](LICENSE)
