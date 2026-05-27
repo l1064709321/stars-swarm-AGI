@@ -24,7 +24,7 @@ This repository implements the first experimental validation (**STARS-Sink**).
 The full architectural vision is detailed in the accompanying white paper.
 
 See  RFC.md (docs/RFC.md) for the technical roadmap.  
-See also the ** Architectural White Paper (Lexicon v0.1.0) (Starswarm-AIOS-WhitePaper-v0.1.0-Lexicon.md)** for the theoretical framework of **Endogenous Autonomy**.
+See also the ** Architectural White Paper (Lexicon v0.1.0) (群星架构白皮书.md)** for the theoretical framework of **Endogenous Autonomy**.
 
 ---
 
