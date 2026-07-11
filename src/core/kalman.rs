@@ -92,7 +92,7 @@ impl AdaptiveKalmanFilter {
     /// Update: Kalman gain and state correction
     fn update(&mut self, measurement: &[f32]) -> Result<(), String> {
         if measurement.len() != self.measurement.nrows() {
-            return Err(format!("Measurement size mismatch"));
+            return Err("Measurement size mismatch".to_string());
         }
 
         let z = Array1::from_vec(measurement.to_vec());
@@ -126,13 +126,18 @@ impl AdaptiveKalmanFilter {
         // x̂ = x̂ + K*(z - H*x̂)
         self.state = &self.state + &k.dot(&innovation);
 
-        // P = (I - K*H)*P
+        // P = (I - K*H)*P  — Joseph form for numerical stability
+        // P' = (I-KH)*P*(I-KH)^T + K*R*K^T  (guarantees positive semi-definite)
         let kh = k.dot(&self.measurement);
         let eye = Array2::eye(kh.nrows());
-        self.covariance = (eye - kh).dot(&self.covariance);
+        let ikh = &eye - &kh;
+        let ikh_t = ikh.t();
+        let p_new = ikh.dot(&self.covariance.dot(&ikh_t))
+            + &k.dot(&self.r_matrix.dot(&k.t()));
+        self.covariance = p_new;
 
         // Adaptive R: increase if innovation is large
-        let innovation_norm = innovation.norm_l2();
+        let innovation_norm = innovation.iter().map(|v| v * v).sum::<f32>().sqrt();
         self.r_adaptive *= 1.0 + 0.001 * (innovation_norm - 1.0);
         self.r_adaptive = self.r_adaptive.clamp(0.001, 10.0);
         self.r_matrix[[0, 0]] = self.r_adaptive;

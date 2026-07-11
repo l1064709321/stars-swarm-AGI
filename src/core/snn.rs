@@ -7,8 +7,9 @@
 //! STDP: ΔW = A+ * exp(-Δt/τ+) if Δt>0 (LTP), -A- * exp(Δt/τ-) if Δt<0 (LTD)
 
 use serde::{Deserialize, Serialize};
-use ndarray::{Array1, Array2};
+use ndarray::Array2;
 use rand::Rng;
+use std::collections::VecDeque;
 
 /// LIF Neuron Parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +64,7 @@ impl Default for STDPParams {
 pub struct LIFNeuron {
     pub v_mem: f32,              // Membrane potential
     pub time_since_spike: f32,   // ms since last spike
+    pub last_spike_time: f32,    // Absolute time of last spike (ms), -1.0 = never
     pub output: f32,             // Spike output (0 or 1)
 }
 
@@ -74,7 +76,8 @@ pub struct SpikingNeuralNetwork {
     stdp_params: STDPParams,
     neurons: Vec<LIFNeuron>,
     weights: Array2<f32>,
-    spike_history: Vec<Vec<bool>>,
+    spike_history: VecDeque<Vec<bool>>,
+    current_time: f32,           // Global simulation time (ms)
 }
 
 impl SpikingNeuralNetwork {
@@ -96,10 +99,12 @@ impl SpikingNeuralNetwork {
             neurons: vec![LIFNeuron {
                 v_mem: -65.0,
                 time_since_spike: 1000.0,
+                last_spike_time: -1.0,
                 output: 0.0,
             }; num_neurons],
             weights,
-            spike_history: vec![vec![false; 1000]],
+            spike_history: VecDeque::with_capacity(1000),
+            current_time: 0.0,
         })
     }
 
@@ -108,6 +113,11 @@ impl SpikingNeuralNetwork {
         if input.len() != self.num_neurons {
             return Err(format!("Input size mismatch: {} != {}", input.len(), self.num_neurons));
         }
+
+        self.current_time += dt;
+
+        // Save previous outputs for synaptic input calculation
+        let prev_outputs: Vec<f32> = self.neurons.iter().map(|n| n.output).collect();
 
         let mut spikes = vec![false; self.num_neurons];
 
@@ -121,10 +131,10 @@ impl SpikingNeuralNetwork {
                 continue;
             }
 
-            // Synaptic input
+            // Synaptic input — use previous outputs to avoid order-dependency
             let mut syn_input = 0.0;
             for j in 0..self.num_neurons {
-                syn_input += self.weights[[j, i]] * self.neurons[j].output;
+                syn_input += self.weights[[j, i]] * prev_outputs[j];
             }
 
             // Integrate: V(t+dt) = V(t) * exp(-dt/tau) + I * (1 - exp(-dt/tau))
@@ -138,41 +148,59 @@ impl SpikingNeuralNetwork {
                 neuron.output = 1.0;
                 neuron.v_mem = self.params.v_reset;
                 neuron.time_since_spike = 0.0;
+                neuron.last_spike_time = self.current_time;
             } else {
                 neuron.output = 0.0;
             }
         }
 
-        self.spike_history.push(spikes.clone());
+        // VecDeque: O(1) push/pop vs Vec O(n) remove(0)
+        self.spike_history.push_back(spikes.clone());
         if self.spike_history.len() > 1000 {
-            self.spike_history.remove(0);
+            self.spike_history.pop_front();  // O(1) instead of O(n)
         }
 
         Ok(spikes)
     }
 
-    /// STDP learning
+    /// STDP learning — proper time-difference-based rule
+    ///
+    /// For each pair (pre→post):
+    ///   Δt = t_post - t_pre
+    ///   If Δt > 0 (pre fired before post): LTP  ΔW = +A+ * exp(-Δt/τ+)
+    ///   If Δt < 0 (post fired before pre): LTD  ΔW = -A- * exp(Δt/τ-)
+    ///
+    /// Ref: Bi & Poo (1998) "Synaptic Modifications in Cultured Hippocampal Neurons"
     pub fn apply_stdp(&mut self, learning_rate: f32) -> Result<(), String> {
-        if self.spike_history.len() < 2 {
-            return Ok(());
-        }
+        let stdp = &self.stdp_params;
 
-        let current = &self.spike_history[self.spike_history.len() - 1];
-        let previous = &self.spike_history[self.spike_history.len() - 2];
+        for post in 0..self.num_neurons {
+            if self.neurons[post].last_spike_time < 0.0 {
+                continue;  // post never fired
+            }
+            let t_post = self.neurons[post].last_spike_time;
 
-        for (post, &post_spike) in current.iter().enumerate() {
-            for (pre, &pre_spike) in previous.iter().enumerate() {
-                let mut dw = 0.0;
-                if post_spike && pre_spike {
-                    dw = self.stdp_params.a_plus * learning_rate; // LTP
-                } else if post_spike && !pre_spike {
-                    dw = -self.stdp_params.a_minus * learning_rate; // LTD
+            for pre in 0..self.num_neurons {
+                if pre == post {
+                    continue;  // no self-connection
                 }
-
-                if dw != 0.0 {
-                    let w = self.weights[[pre, post]] + dw;
-                    self.weights[[pre, post]] = w.clamp(self.stdp_params.w_min, self.stdp_params.w_max);
+                if self.neurons[pre].last_spike_time < 0.0 {
+                    continue;  // pre never fired
                 }
+                let t_pre = self.neurons[pre].last_spike_time;
+
+                let dt = t_post - t_pre;
+                let dw = if dt > 0.0 {
+                    // LTP: pre before post → strengthen
+                    stdp.a_plus * (-dt / stdp.tau_plus).exp()
+                } else {
+                    // LTD: post before pre → weaken
+                    -stdp.a_minus * (dt / stdp.tau_minus).exp()  // dt is negative, so exp(dt/τ-) decays
+                };
+
+                let w_old = self.weights[[pre, post]];
+                let w_new = w_old + dw * learning_rate;
+                self.weights[[pre, post]] = w_new.clamp(stdp.w_min, stdp.w_max);
             }
         }
         Ok(())
@@ -181,6 +209,11 @@ impl SpikingNeuralNetwork {
     /// Get potentials
     pub fn get_potentials(&self) -> Vec<f32> {
         self.neurons.iter().map(|n| n.v_mem).collect()
+    }
+
+    /// Get current simulation time
+    pub fn get_time(&self) -> f32 {
+        self.current_time
     }
 
     /// Serialize state
@@ -212,11 +245,42 @@ mod tests {
     }
 
     #[test]
-    fn test_stdp() {
+    fn test_stdp_ltp() {
+        // Strong input should cause repeated firing → LTP on active pairs
         let mut snn = SpikingNeuralNetwork::new(5).unwrap();
-        for _ in 0..10 {
-            let _ = snn.forward(&vec![0.5; 5], 1.0);
+        for _ in 0..20 {
+            let _ = snn.forward(&vec![0.8; 5], 1.0);
         }
+        // Save weights before STDP
+        let w_before = snn.weights[[0, 1]];
         let _ = snn.apply_stdp(0.01);
+        let w_after = snn.weights[[0, 1]];
+        // Weights should have changed
+        assert_ne!(w_before, w_after);
+    }
+
+    #[test]
+    fn test_stdp_time_dependence() {
+        // STDP should be exponentially decaying with time difference
+        let mut snn = SpikingNeuralNetwork::new(2).unwrap();
+        // Fire neuron 0 at t=1
+        snn.neurons[0].last_spike_time = 1.0;
+        // Fire neuron 1 at t=5 (4ms later)
+        snn.neurons[1].last_spike_time = 5.0;
+        let w_before = snn.weights[[0, 1]];
+        let _ = snn.apply_stdp(1.0);
+        let w_after = snn.weights[[0, 1]];
+        // Δt = 4ms > 0 → LTP → weight should increase
+        assert!(w_after > w_before, "LTP expected: {} > {}", w_after, w_before);
+    }
+
+    #[test]
+    fn test_vecdeque_capacity() {
+        let mut snn = SpikingNeuralNetwork::new(10).unwrap();
+        // Push more than 1000 entries
+        for _ in 0..1100 {
+            let _ = snn.forward(&vec![0.1; 10], 1.0);
+        }
+        assert!(snn.spike_history.len() <= 1000);
     }
 }
