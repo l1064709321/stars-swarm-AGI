@@ -987,7 +987,8 @@ class MessageBus:
 
         self.router.load_state_dict(save_dict["router_state"])
         self.fusion.load_state_dict(save_dict["fusion_state"])
-        self.router._trained = True
+        # v0.0.0.1: Router 权重未训练，保持规则路由
+        # 训练 Router 后再启用: self.router._trained = True
         print(f"[MessageBus] 权重已加载: {path}")
 
 

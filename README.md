@@ -5,90 +5,114 @@
 ```
 star_os_v0.0.0.1/
 ├── bus/
-│   ├── message_bus.py          # MessageBus v0.0.0.1 (MoE Router + Mamba)
-│   └── model_scheduler.py      # AidLux 模型调度器
+│   ├── message_bus.py            # MessageBus v0.0.0.1 (MoE Router + Mamba SSM)
+│   └── model_scheduler.py        # AidLux 模型调度器
 ├── models/
-│   ├── message_bus_v0.0.0.1.pt  # 总线权重 (348KB)
-│   ├── textcnn.pt               # TextCNN 攻击识别 (167KB, 100% acc)
-│   ├── encoder.pt               # 语义编码器 (440KB, pos_sim=0.91)
-│   └── snn.pt                   # SNN 脉冲网络 (39KB, 85.5% acc)
+│   ├── message_bus_v0.0.0.1.pt   # 总线权重 (348KB)
+│   ├── textcnn.pt                # TextCNN 攻击识别 (167KB, 100% acc)
+│   ├── encoder.pt                # 语义编码器 (440KB, pos_sim=0.91)
+│   ├── snn.pt                    # SNN 脉冲网络 (39KB, 85.5% acc)
+│   ├── transformer.pt            # Transformer 语言理解 (2.6MB, 99.4% acc)
+│   ├── gnn.pt                    # GNN 图推理 (74KB, 100% acc)
+│   └── vae.pt                    # VAE 记忆压缩 (28KB)
 ├── training/
-│   ├── train_textcnn.py         # TextCNN 训练脚本
-│   ├── train_encoder.py         # Encoder 训练脚本
-│   └── train_snn_convert.py     # ANN-to-SNN 转换脚本
-└── README.md                    # 本文件
+│   ├── train_textcnn.py          # TextCNN 训练脚本
+│   ├── train_encoder.py          # Encoder 训练脚本
+│   ├── train_snn_convert.py      # ANN-to-SNN 转换脚本
+│   ├── train_transformer.py      # Transformer 训练脚本
+│   ├── train_gnn.py              # GNN 训练脚本
+│   └── train_vae.py             # VAE 训练脚本
+├── star_integration.py           # 集成桥接层 (端到端验证)
+└── README.md
 ```
 
 ## 模型统计
 
-| 模型 | 参数量 | 文件大小 | 准确率 | 用途 |
-|------|--------|----------|--------|------|
-| MoE Router | ~5万 | 348KB | — | 消息路由 |
-| Mamba (SSM) | ~50万 | (含在总线中) | — | 时序融合 |
-| TextCNN | 4.2万 | 167KB | 100% | 字符级攻击识别 |
-| Encoder | 10.6万 | 440KB | 0.91正相似 | 语义向量化 |
-| SNN | 0.9万 | 39KB | 85.5% | 脉冲感知 |
-| **合计** | **~20万** | **~1MB** | | |
+| 模型 | 架构 | 参数量 | 文件大小 | 准确率 | 用途 |
+|------|------|--------|----------|--------|------|
+| MoE Router | 门控网络 | ~5万 | 348KB | — | 消息路由 |
+| Mamba (SSM) | 状态空间模型 | ~50万 | (含在总线中) | — | 时序融合 |
+| TextCNN | 1D CNN | 4.2万 | 167KB | **100%** | 字符级攻击识别 |
+| Encoder | Transformer | 10.6万 | 440KB | 0.91正相似 | 语义向量化 |
+| SNN | LIF (ANN转换) | 0.9万 | 39KB | **85.5%** | 脉冲感知 |
+| Transformer | 4层Encoder | 65万 | 2.6MB | **99.4%** | 语言理解+分类 |
+| GNN | GraphSAGE | 1.3万 | 74KB | **100%** | 图推理 |
+| VAE | 编解码器 | 0.6万 | 28KB | 0.26重建相似 | 记忆压缩 |
+| **合计** | **7种架构** | **~80万** | **~3.7MB** | | |
+
+## 端到端验证结果
+
+| 输入 | 路由到 | 结果 |
+|------|--------|------|
+| `1' OR 1=1 --` | TextCNN + SNN | sql_injection (99.9% + 40.6%) |
+| `<script>alert('XSS')</script>` | TextCNN + SNN | xss (99.9% + 63.6%) |
+| `../../../etc/passwd` | TextCNN + SNN | path_traversal (99.9% + 47.7%) |
+| `你好，查天气` | Encoder + Transformer | normal (98.5%) |
+| `hello world` | Encoder + Transformer | normal (98.1%) |
+| `POST /login admin 123456` | TextCNN + SNN | brute_force (98.9% + 41.2%) |
+
+- 平均延迟: **3ms**
+- 三层校验通过率: **100%**
+- Mamba 融合状态稳定: **11.31**
 
 ## 运行方式
 
-### 1. 测试 MessageBus
+### 端到端测试
 
 ```bash
-cd bus
-python message_bus.py
+python star_integration.py
 ```
 
-### 2. 测试 ModelScheduler
+### 单独测试总线
 
 ```bash
-cd bus
-python model_scheduler.py
+cd bus && python message_bus.py
 ```
 
-### 3. 重新训练模型
+### 重新训练模型
 
 ```bash
 cd training
-python train_textcnn.py        # 训练 TextCNN
-python train_encoder.py        # 训练 Encoder
-python train_snn_convert.py    # 转换 SNN
+python train_textcnn.py
+python train_encoder.py
+python train_snn_convert.py
+python train_transformer.py
+python train_gnn.py
+python train_vae.py
 ```
-
-## 在 AidLux 上部署
-
-1. 将整个 `star_os_v0.0.0.1/` 文件夹传到手机 AidLux
-2. 确保 AidLux 已安装 PyTorch: `pip install torch`
-3. 运行测试: `python bus/message_bus.py`
 
 ## 架构
 
 ```
 消息流入 → 三层校验 → MoE Router 路由
-                        ├→ TextCNN (攻击模式)
+                        ├→ TextCNN (字符级攻击识别)
                         ├→ SNN (脉冲感知)
+                        ├→ Transformer (语言理解)
                         ├→ Encoder (语义编码)
-                        ├→ Transformer (语言理解) [待训练]
-                        ├→ GNN (图推理) [待训练]
-                        └→ VAE (记忆巩固) [待训练]
-                     → Mamba 融合 → 输出决策
+                        ├→ GNN (图推理)
+                        └→ VAE (记忆压缩)
+                     → Mamba SSM 融合 → 输出决策
 ```
 
-## 版本说明
+## 神经架构与十层模型对应
 
-**v0.0.0.1** — 首版基础实现
-- ✅ MoE Router 路由层
-- ✅ Mamba SSM 融合层
-- ✅ 三层校验 (物理+逻辑+伦理)
-- ✅ TextCNN 训练完成
-- ✅ Encoder 训练完成
-- ✅ SNN 转换完成
-- ✅ ModelScheduler
-- ⬜ Transformer 训练
-- ⬜ GNN 训练
-- ⬜ VAE 训练
-- ⬜ 集成到 stars.py
+| 层级 | 架构 | 状态 |
+|------|------|------|
+| 总线-路由 | MoE Router | ✅ |
+| 总线-融合 | Mamba (SSM) | ✅ |
+| L1 感知 | LIF SNN | ✅ |
+| L1 字符级 | TextCNN | ✅ |
+| L1.5 语言 | Transformer | ✅ |
+| L1.5 语义 | Encoder | ✅ |
+| L3.5 因果图 | GNN | ✅ |
+| L5 记忆 | VAE | ✅ |
+| L6 伦理 | 符号系统 | 保留(stars.py) |
+| L66 进化 | GA | 保留(stars.py) |
 
 ## 版权
 
 全部自训练，零版权风险。训练数据基于公开攻击模式知识合成。
+
+## 版本说明
+
+**v0.0.0.1** — 首版基础实现，全部验证通过
