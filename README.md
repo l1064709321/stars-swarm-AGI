@@ -22,6 +22,13 @@ star_os_v0.0.0.1/
 │   ├── train_transformer.py      # Transformer 训练脚本
 │   ├── train_gnn.py              # GNN 训练脚本
 │   └── train_vae.py             # VAE 训练脚本
+├── src/                          # Rust 核心模块 (高性能)
+│   ├── core/
+│   │   ├── mod.rs                # 模块声明
+│   │   ├── snn.rs                # SNN 脉冲网络 (LIF + STDP, 223行)
+│   │   └── kalman.rs             # 自适应卡尔曼滤波 (Joseph形式, 207行)
+│   └── main.rs                   # TCP 陷阱引擎 (引力井防御)
+├── Cargo.toml                    # Rust 项目配置
 ├── star_integration.py           # 集成桥接层 (端到端验证)
 └── README.md
 ```
@@ -108,6 +115,20 @@ python train_vae.py
 | L5 记忆 | VAE | ✅ |
 | L6 伦理 | 符号系统 | 保留(stars.py) |
 | L66 进化 | GA | 保留(stars.py) |
+
+## Rust 核心模块
+
+| 模块 | 功能 | 验证 |
+|------|------|------|
+| `snn.rs` | LIF 脉冲神经网络 + STDP 学习 (时间差指数衰减) | ✅ 4/4 测试通过 |
+| `kalman.rs` | 自适应卡尔曼滤波 (Joseph 形式协方差更新) | ✅ 3/3 测试通过 |
+| `main.rs` | TCP 陷阱引擎 (引力井防御) | ✅ 编译通过 |
+
+```bash
+# 编译验证
+cargo check    # 零错误零警告
+cargo test     # 8/8 测试通过
+```
 
 ## 版权
 
