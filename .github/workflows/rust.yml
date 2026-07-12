@@ -10,20 +10,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-core:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build core (tarpit + SNN + Kalman)
-      run: cargo build -p star-os-core --verbose
-    - name: Test core
-      run: cargo test -p star-os-core --verbose
+  build:
 
-  build-star-os:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
-    - name: Build star_os (MoE + Mamba + full neural architecture)
-      run: cargo build -p star-os-neural --verbose
-    - name: Test star_os
-      run: cargo test -p star-os-neural --verbose
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
