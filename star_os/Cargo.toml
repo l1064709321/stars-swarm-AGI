@@ -1,0 +1,49 @@
+[package]
+name = "star-os-neural"
+version = "0.0.1"
+edition = "2021"
+description = "星OS - 十层神经架构AI系统（MoE Router + Mamba SSM），AidLux端侧部署"
+authors = ["StarOS Team"]
+license = "MIT"
+rust-version = "1.75"
+
+[dependencies]
+# burn 深度学习框架（纯 Rust，ndarray CPU 后端）
+burn = { version = "0.16", features = ["ndarray"] }
+# 序列化支持
+serde = { version = "1.0", features = ["derive"] }
+# 日志
+log = "0.4"
+# 简单日志输出
+env_logger = "0.10"
+# 随机数
+rand = "0.8"
+
+[lib]
+name = "star_os"
+path = "src/lib.rs"
+
+[[bin]]
+name = "star_os_demo"
+path = "src/main.rs"
+
+[[bin]]
+name = "train_textcnn"
+path = "src/training/textcnn_train.rs"
+
+[[bin]]
+name = "train_encoder"
+path = "src/training/encoder_train.rs"
+
+[[bin]]
+name = "train_vae"
+path = "src/training/vae_train.rs"
+
+[[bin]]
+name = "train_gnn"
+path = "src/training/gnn_train.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
